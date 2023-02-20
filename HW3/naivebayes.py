@@ -22,14 +22,13 @@ class NaiveBayes():
         """
         ###TODO###
         #extract character ngrams
-        x = list(x)
         n_grams = []
         
-        if "\n" in x:
-            n_grams.append("\n")
-        for i in range(0, len(x) - n, n):
+        for i in range(0, len(x)):
             n_grams.append(x[i : i + n])
-
+        
+        n_grams = n_grams[:len(n_grams) - n + 1]
+        
         return n_grams
 
     def smoothed_log_likelihood(self, w: str, c: str, k: int, count: 'DefaultDict[str, Counter]', vocab: "set[str]") -> float:
@@ -44,26 +43,12 @@ class NaiveBayes():
         """
         ###TODO###
         #apply smoothing
-        word_count = 0
-        vocabulary_count = {}
-
-        for doc in count[c]:
-            word_count += doc.count(w)
-            
-            for vocabulary in vocab:
-                if vocabulary != w:
-                    if vocabulary in vocabulary_count:
-                        vocabulary_count[vocabulary] += doc.count(vocabulary)
-                    else:
-                        vocabulary_count[vocabulary] = doc.count(vocabulary) + k
-        
-        
         summation_of_vocab_count = 0
-
-        for vocab in vocabulary_count.keys():
-            summation_of_vocab_count += vocabulary_count[vocab]
-
-        log_likelihood = log((word_count + k)/(summation_of_vocab_count + word_count + k))
+        word_count = count[w][c]
+        
+        for word in count.keys():
+            summation_of_vocab_count += count[word][c] + k
+        log_likelihood = log((word_count + k)/(summation_of_vocab_count))
 
         return log_likelihood
 
@@ -91,32 +76,36 @@ class NaiveBayes():
                 log_priors[doc_label] += 1
             else:
                 log_priors[doc_label] = 1
-        
+
+            
         labels = log_priors.keys()
-
-        for label in labels:
-            log_priors[label] = log(log_priors[label]/num_of_docs)
-
-        vocabulary = {}
-        for doc in docs:
-            for vocab in self.extract_ngrams(doc[1]):
-                for v in vocab:
-                    vocabulary[v] = True
-
-        vocabulary = vocabulary.keys()
-        print(vocabulary)
         big_doc = {}
 
         for label in labels:
+            log_priors[label] = log(log_priors[label]/num_of_docs)
             big_doc[label] = []
 
+        vocabulary = {}
+        vocab_frequency = {}
         for doc in docs:
-            big_doc[doc[0]].append(doc[1])
+            for vocab in self.extract_ngrams(doc[1], n):
+                vocabulary[vocab] = True
+                if vocab not in vocab_frequency:
+                    vocab_frequency[vocab] = {}
+                    
+                    for label in labels:
+                        if label not in vocab_frequency[vocab]:
+                            vocab_frequency[vocab][label] = 0
+                    vocab_frequency[vocab][doc[0]] = 1
+                else:
+                    vocab_frequency[vocab][doc[0]] += 1
+
+        vocabulary = vocabulary.keys()
         
         log_likelihoods = {}
         for word in vocabulary:
             for label in labels:
-                log_likelihood = self.smoothed_log_likelihood(word, label, k, big_doc, vocabulary)
+                log_likelihood = self.smoothed_log_likelihood(word, label, k, vocab_frequency, vocabulary)
                 
                 if word not in log_likelihoods:
                     log_likelihoods[word] = {label:log_likelihood}
@@ -146,6 +135,16 @@ class NaiveBayes():
         ##TODO
         # Initialize the sums for each class. These will be the "scores" based on which class will be assigned.
         class_sum = {}
+
+        frequency = {}
+        total_frequency = 0
+
+        for vocab in doc:
+            count = testdoc.count(vocab)
+            if vocab not in frequency:
+                frequency[vocab] = count + k
+                total_frequency += count + k
+                
         ##TODO
         # Iterate over the classes, computing `class_sum` for each
         for c in classes:
@@ -154,19 +153,13 @@ class NaiveBayes():
             ##TODO
             # Then add the likelihood for each in-vocabulary word/ngram in the document
             class_sum[c] = 0
+                    
+            for vocab in doc:
+                try:
+                    class_sum[c] += log_likelihood[vocab][c]
+                except:    
+                    class_sum[c] += log(frequency[vocab]/(total_frequency - frequency[vocab]))
 
-            for vocab in self.extract_ngrams(testdoc):
-                for v in vocab:
-                    try:
-                        class_sum[c] += log_likelihood[v][c]
-                    except:    
-                        v_count = testdoc.count(v) + k
-                        v_complement_count = 0
-
-                        for v_complement in set(testdoc):
-                            v_complement_count += testdoc.count(v_complement) + k
-                        
-                        class_sum[c] += log(v_count/v_complement_count)
         best_class = list(class_sum.keys())[0]
         best_class_value = class_sum[best_class]
 
@@ -176,9 +169,6 @@ class NaiveBayes():
                 best_class_value = class_sum[a_class]
         
         return best_class
-        
-            
-        
 
     def precision(self,tp: "dict[str, int]", fp: "dict[str, int]") -> float:
         return tp / (tp + fp)
@@ -258,5 +248,6 @@ if __name__ == '__main__':
         test = [tuple(l.split('\t')) for l in f]
 
     tmp=NaiveBayes()
+    # tmp.train_nb(train, n=2)
     map, mar, maf, mp, mr, mf=tmp.evaluate(train, test, n=2)
 
