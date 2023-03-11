@@ -32,8 +32,16 @@ def flatten(lst):
     Returns:
         Flattened 1-D list
     """
-    return [item for sublist in lst for item in sublist]
+    def helper():
+        from collections.abc import Iterable
 
+        for x in lst:
+            if isinstance(x, Iterable) and not isinstance(x, (str, bytes)):
+                yield from flatten(x)
+            else:
+                yield x
+    
+    return list(helper())
 
 #######################################
 # TO-DO: get_ngrams()
@@ -52,7 +60,16 @@ def get_ngrams(list_of_words, n):
         n_grams: List[Tuple]
             Returns a list containing n-gram tuples
     """
-    return NotImplemented
+    list_of_words = flatten(list_of_words)
+    n_grams = []
+
+    for i in range(len(list_of_words)):
+        store = list_of_words[i:i+n]
+        if len(store) == n:
+            n_grams.append(tuple(store))
+    
+
+    return n_grams
 
 #######################################
 # TO-DO: LanguageModel()
@@ -67,38 +84,76 @@ class LanguageModel():
         n: int
             n-gram order
         train_data: List[List]
-            already preprocessed list of sentences. e.g. [["<s>", "hello", "my", "</s>"], ["<s>", "hi", "there", "</s>"]]
+            already preprocessed unflattened list of sentences. e.g. [["<s>", "hello", "my", "</s>"], ["<s>", "hi", "there", "</s>"]]
         alpha: float
             Smoothing parameter
         
-        Other required parameters:
+        Other attributes:
+            self.tokens: list of individual tokens present in the training corpus
             self.vocab: vocabulary dict with counts
             self.model: n-gram language model, i.e., n-gram dict with probabilties
-            self.n_grams_counts: Count of all the n-grams present in the training data
-            self.prefix_counts: Count of all the corresponding n-1 grams present in the training data
+            self.n_grams_counts: dictionary for storing the frequency of ngrams in the training data, keys being the tuple of words(n-grams) and value being their frequency
+            self.prefix_counts: dictionary for storing the frequency of the (n-1) grams in the data, similar to the self.n_grams_counts
+            As an example:
+            For a trigram model, the n-gram would be (w1,w2,w3), the corresponding [n-1] gram would be (w1,w2)
         """
         self.n = n
         self.train_data = train_data
-        self.tokens = flatten(self.train_data)
-        
-        self.n_grams_counts = None
-        self.prefix_counts = None
-        self.vocab  = Counter(self.tokens)
+        self.n_grams_counts = Counter([])
+        self.prefix_counts = Counter([])
         self.alpha = alpha
-        self.model = self.build()
         
-    def get_smooth_probabilites(self,n_gram):
-        """
-        Returns the smoothed probability of the ngram, using Laplace Smoothing
-        """
-        return NotImplemented
-    
+        # Fill in the following two lines of code
+        self.tokens = flatten(train_data)
+        self.vocab  = Counter(self.tokens)
+        self.sum_of_frequencies  = 0
+
+        self.model = self.build()
+
+
     def build(self):
         """
-        Returns a n-gram (could be a unigram) dict with probabilities
+        Returns a n-gram dict with their smoothed probabilities. Remember to consider the edge case of n=1 as well
+        
+        You are expected to update the self.n_grams_counts and self.prefix_counts, and use those calculate the probabilities. 
         """
-        return NotImplemented
+        # Extract n-grams from the flattened training data [update n_grams_counts]
+        
+        # Calculate the prefix (n-1 grams) count using the extracted n-grams [update prefix_counts]
+        
+        # Calculate probabilities using the get_smooth_probabilities function, you need to define the function
 
+        # Return the probabilities
+        n_gram_probabilities = Counter()
+
+
+        n_grams = get_ngrams(self.tokens, n=self.n)
+        
+        for n_gram in n_grams:
+            if n_gram not in self.n_grams_counts: 
+                self.n_grams_counts[n_gram] = 1
+            else:
+                self.n_grams_counts[n_gram] += 1
+            if self.n != 1:
+                self.prefix_counts[n_gram[0:-1]] += n_gram[0:-1].count(n_gram[0:-1][0])
+
+        self.sum_of_frequencies = sum(self.n_grams_counts.values())
+        for n_gram in n_grams:
+            if n_gram not in n_gram_probabilities:
+                n_gram_probabilities[n_gram] = self.get_smooth_probabilites(n_gram)
+
+        return n_gram_probabilities
+    
+    def get_smooth_probabilites(self,n_gram):
+        """
+        Returns the smoothed probability of the n-gram, using Laplace Smoothing. 
+        Remember to consider the edge case of  n = 1
+        HINT: Use self.n_gram_counts, self.tokens and self.prefix_counts 
+        """
+        if self.n != 1:
+            return (self.n_grams_counts[n_gram] + self.alpha) / (self.prefix_counts[n_gram[0:-1]] + self.alpha * len(self.vocab))
+        else:
+            return (self.n_grams_counts[n_gram] + self.alpha) / (self.sum_of_frequencies + self.alpha * len(self.vocab))
 
 #######################################
 # TO-DO: perplexity()
@@ -119,8 +174,15 @@ def perplexity(lm, test_data):
     float
         Calculated perplexity value
     """
-    return NotImplemented
+    flattened_data = flatten(test_data)
+    n_grams = get_ngrams(flattened_data, lm.n)
+    perplexity_result = 0
+    for n_gram in n_grams:
+        perplexity_result -= math.log(lm.get_smooth_probabilites(n_gram))
+    
+    perplexity_result = (1/len(flattened_data)) * perplexity_result
 
+    return math.exp(perplexity_result)
 
 ###############################################
 # Method: Most Probable Candidates [Don't Edit]
