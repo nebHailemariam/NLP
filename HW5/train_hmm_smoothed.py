@@ -39,7 +39,8 @@ class HMMTrainSmoothed:
                 tags = re.split("\s+", tag_string.rstrip())
                 tokens = re.split("\s+", token_string.rstrip())
                 pairs = zip(tags, tokens)
-
+                # if len(self.transitions) > 3:
+                # break
                 # Starts off with initial state
                 prevtag = self.INIT_STATE
 
@@ -57,41 +58,65 @@ class HMMTrainSmoothed:
                     # =======================TO-DO=======================
 
                     if tag not in self.emissions:
-                        pass
                         # initialize to store count of transition from 'tag' to the tokens in the corpus
+                        self.emissions[tag] = defaultdict(lambda: 0)
                     if prevtag not in self.transitions:
                         # intitialize to store count of transition from 'prevtag' to current tag
-                        pass
+                        self.transitions[prevtag] = defaultdict(lambda: 0)
+
                     # =======================TO-DO=======================
 
                     # increment count for self.emissions
+                    self.emissions[tag][token] += 1
                     # increment count for self.transitions
+                    self.transitions[prevtag][tag] += 1
                     # increment count for self.transitions_total
+                    self.transitions_total[prevtag] += 1
                     # increment count for self.emissions_total
+                    self.emissions_total[prevtag] += 1
+
+                    prevtag = tag
 
                 # don't forget the stop probability for each sentence
                 if prevtag not in self.transitions:
                     self.transitions[prevtag] = defaultdict(lambda: 0)
-
                 # =======================TO-DO=======================
                 # increment count for self.transitions from prevtag to final state
+                self.transitions[prevtag][self.FINAL_STATE] += 1
                 # increment count for self.transitions_total for prevtag
-                # Count the total number of unique transitions for count_of_transitions
-                # Count the total number of unique emissions for count_of_emissions
+                self.transitions_total[prevtag] += 1
+        # Count the total number of unique transitions for count_of_transitions
+        for transition in self.transitions:
+            self.count_of_transitions += len(self.transitions[transition].keys())
+        # Count the total number of unique emissions for count_of_emissions
+        for emission in self.emissions:
+            self.count_of_emissions += len(self.emissions[emission].keys())
 
     # =======================TO-DO=======================
     # calculate the transition probability prevtag -> tag
     def calculate_transition_prob(self, prevtag, tag):
         # Discount factor is defined in init
 
-        # Calculate the continuation probability using the 'novel continuation for a tag' (number of word types seen to precede tag) and the total number of bigram types
-        # You can choose to fill the template for the function calculate_novel_continuation and use it or you can do write your own code here.
+        # Calculate the continuation probability using the 'novel continuation for a tag'
+        # (number of word types seen to precede tag) and the total number of bigram types
+        # You can choose to fill the template for the function calculate_novel_continuation
+        # and use it or you can do write your own code here.
 
-        # Calculate the backoff probability using the count of the transitions with prevtag and the number of unique words than can follow prevtag
+        # Calculate the backoff probability using the count of the transitions with prevtag
+        # and the number of unique words than can follow prevtag
 
-        # Calculate the smoothed probability
+        probability = (
+            max((self.transitions[prevtag][tag] - self.d), 0)
+            / self.transitions_total[prevtag]
+        )
+        total_discount = (self.d / self.transitions_total[prevtag]) * len(
+            self.transitions[prevtag].keys()
+        )
+        novel_continuation = (
+            self.calculate_novel_continuation(tag, True) / self.count_of_transitions
+        )
 
-        return 0.0
+        return probability + total_discount * novel_continuation
 
     # =======================TO-DO=======================
     # calculate the probability of emitting token given tag
@@ -102,8 +127,17 @@ class HMMTrainSmoothed:
         # Calculate the backoff probability using the count of the emissions from tag and the number of unique tokens than can be emitted from tags
 
         # Calculate the smoothed probability
+        probability = (
+            max((self.emissions[tag][token] - self.d), 0) / self.emissions_total[tag]
+        )
+        total_discount = (self.d / self.emissions_total[tag]) * len(
+            self.emissions[tag].keys()
+        )
+        novel_continuation = (
+            self.calculate_novel_continuation(token, False) / self.count_of_emissions
+        )
 
-        return 0.0
+        return probability + total_discount * novel_continuation
 
     def calculate_novel_continuation(self, tag_or_token, transition=True):
         # If transition is true, this function was called by calculate_transition_prob otherwise calculate_emission_prob
@@ -111,11 +145,16 @@ class HMMTrainSmoothed:
         if transition == False:
             main_checker = self.emissions
 
+        count_continuation = 0
+        for pre_state in main_checker:
+            if main_checker[pre_state][tag_or_token]:
+                count_continuation += 1
+
         # Loop on main_checker to either:
         # 1. For transitions, get the number of all prevtags which have tag as a transition
         # or, 2. For emission, get the number of all tags which have token emitting from it and return it.
 
-        return 0.0
+        return count_continuation
 
     # Write the model to an output file.
     # Doesn't need to be modified
